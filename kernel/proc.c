@@ -8,6 +8,7 @@
 
 struct cpu cpus[NCPU];
 
+//这个数组就保存着所有的进程
 struct proc proc[NPROC];
 
 struct proc *initproc;
@@ -721,4 +722,19 @@ void procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+// 计算进程数
+uint64 free_proc(void)
+{
+  uint64 n = 0;
+  struct proc *p;
+  for (p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+    if (p->state != UNUSED)
+      n++;
+    release(&p->lock);
+  }
+  return n;
 }
