@@ -1,0 +1,13 @@
+a0 - a2 contain arguments to functions
+a2 holds 13
+
+编译器优化后，无函数调用
+
+printf at 0x630
+
+ra  0x38
+
+输出：HE110 WORLD
+如果risc-v是大端，i需要设置为0x726c64，57616不需要变  读字符串是地址从小到大递增的
+
+应该打印出寄存器a2的值，因为printf会从a2寄存器中读取第三个参数作为y的值。
