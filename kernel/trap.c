@@ -77,9 +77,26 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+     // printf("mytrap\n");
+    if(p->interval>0) //have interval
+    {
+      // printf("inte\n");
+      if(--(p->ticks)<=0)
+      {
+        // printf("cge to %d\n",p->ticks);
+        if(p->alarm_trapframe==0) //not handling
+        {
+          // printf("in the trap\n");
+          p->alarm_trapframe=kalloc();
+          memmove(p->alarm_trapframe,p->trapframe,512);
+          p->trapframe->epc=(uint64)p->handler;
+          p->ticks=p->interval; //reset
+        }
+      }   //count down and done
+    }
     yield();
-
+  }
   usertrapret();
 }
 
