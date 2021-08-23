@@ -21,30 +21,30 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
-  uint counter[(PHYSTOP-KERNBASE)/PGSIZE];
+  uint counter[(PHYSTOP-KERNBASE)/PGSIZE]; // 用于记录每个物理页面的映射次数
 } kmem;
 
 inline
 uint64
-getpg(uint64 pa)
+getpg(uint64 pa) // 根据物理页地址得到计数器的index
 {
   return (pa - KERNBASE) / PGSIZE;
 }
 
 uint
-getref(uint64 pa)  //get refcnt
+getref(uint64 pa)  // 获取对应物理页的计数器值
 {
   return kmem.counter[getpg(pa)];
 }
 
 void
-setref(uint64 pa,int n)  //set refcnt
+setref(uint64 pa,int n)  // 重新设置对应物理页的计数器值
 {
   kmem.counter[getpg(pa)]=n;
 }
 
 void
-addref(uint64 pa,int n)   //external function,used in uvmcopy
+addref(uint64 pa,int n)   // 将对应物理页的计数器值增加n
 {
   kmem.counter[getpg(pa)]+=n;
 }
@@ -78,7 +78,7 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
   acquire(&kmem.lock);
-  if(getref((uint64)pa)>0)
+  if(getref((uint64)pa)>0) // 页面被映射次数>1时，计数器减一
   {
     addref((uint64)pa,-1);
   }
@@ -89,8 +89,8 @@ kfree(void *pa)
 
     r = (struct run*)pa;
 
-    r->next = kmem.freelist;
-   kmem.freelist = r;
+    r->next = kmem.freelist; //加入空闲链表
+    kmem.freelist = r;
   }
   release(&kmem.lock);
 }
@@ -111,7 +111,7 @@ kalloc(void)
     memset((char*)r,5,PGSIZE);// fill with junk
   
   if(r)
-    addref((uint64)r,1);
+    addref((uint64)r,1);// 分配页面时映射计数器加一
   release(&kmem.lock);
   return (void*)r;
 }

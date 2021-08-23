@@ -67,10 +67,10 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if(r_scause()==15){
-    uint64 va=r_stval();
-    if(cowcopy(p->pagetable,va)<0)
-      p->killed=1;
+  } else if(r_scause()==15){ // 捕获page fault
+    uint64 va=r_stval(); // 调用cowcopy函数，在产生错误的虚拟地址处为进程分配物理页
+    if(cowcopy(p->pagetable,va)<0) 
+      p->killed=1;  //如果页面分配失败则杀死进程
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());

@@ -159,7 +159,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    // if(*pte & PTE_V)
+    // if(*pte & PTE_V) 当检查到一个物理页被多次映射时不再panic
     //   panic("remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
@@ -322,14 +322,14 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
-    flags = (PTE_FLAGS(*pte)&(~PTE_W))|PTE_COW;
+    flags = (PTE_FLAGS(*pte)&(~PTE_W))|PTE_COW;//设置子进程PTE的flags
 
-    *pte=((*pte)&(~PTE_W))|PTE_COW; //set bits
+    *pte=((*pte)&(~PTE_W))|PTE_COW; //设置父进程PTE的flags
 
     if(mappages(new, i, PGSIZE, pa, flags) != 0)
       goto err;
 
-    addref(pa,1);
+    addref(pa,1); // 为该被映射的物理页添加一个引用计数，用于后面释放时判断
   }
 
   return 0;
@@ -362,12 +362,12 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
 
-    if(va0 >= MAXVA)
+    if(va0 >= MAXVA) // 处理虚拟地址异常
       return -1;
     pte_t* pte = walk(pagetable, va0, 0);
-    if(pte && (*pte & PTE_COW) != 0){
+    if(pte && (*pte & PTE_COW) != 0){ //如果pte有效且是COW page
       // cow page
-      if(cowcopy(myproc()->pagetable,va0) != 0){
+      if(cowcopy(myproc()->pagetable,va0) != 0){ // 处理COW
         return -1;
       }
     }
@@ -461,23 +461,23 @@ cowcopy(pagetable_t pagetable, uint64 va)
   uint64 pa;
   uint flags;
 
-  va=PGROUNDDOWN(va);
+  va=PGROUNDDOWN(va); // 发生page fault的虚拟地址
   pte=walk(pagetable,va,0);
   if(pte==0) return -1;
-  pa = PTE2PA(*pte);
+  pa = PTE2PA(*pte); // 找到被复制的页面
   flags = PTE_FLAGS(*pte);
 
-  if(getref(pa)>1)
+  if(getref(pa)>1) // 该页面被映射了不止一次
   {
-    char *ka=kalloc();
-    if(ka==0)
+    char *ka=kalloc(); // 新分配一个物理页
+    if(ka==0) // 分配失败
       return -1;
-    memmove(ka,(char*)pa,PGSIZE);
+    memmove(ka,(char*)pa,PGSIZE);// 复制原来指向的页面的数据到新页面上
     kfree((void*)pa);
-    flags=(flags&(~PTE_COW))|PTE_W;
+    flags=(flags&(~PTE_COW))|PTE_W;// 重新设置标志位
     *pte=PA2PTE((uint64)ka)|flags;
   }
-  else
+  else // 该页面只被映射了一次，直接修改PTE的标志位，使其不再是需要cow的页面
     *pte=((*pte)&(~PTE_COW))|PTE_W;
   return 0;
 }
