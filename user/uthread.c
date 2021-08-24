@@ -97,8 +97,8 @@ thread_create(void (*func)())
   }
   t->state = RUNNABLE;
   // YOUR CODE HERE
-  t->context.ra=(uint64)func;
-  t->context.sp=(uint64)t->stack+STACK_SIZE; // 指向栈底
+  t->context.ra=(uint64)func; // 记录初次切换到线程时从何处执行
+  t->context.sp=(uint64)t->stack+STACK_SIZE; // 指向栈顶
 }
 
 void 
