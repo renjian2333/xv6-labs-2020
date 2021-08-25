@@ -149,6 +149,10 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
+<<<<<<< HEAD
+=======
+	$U/_open\
+>>>>>>> bcbafa7a54a9c3ee9bc1356e1ea785291c300598
 	$U/_sleep\
 	$U/_pingpong\
 	$U/_primes\
