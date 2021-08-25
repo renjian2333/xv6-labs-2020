@@ -15,6 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "buf.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -330,6 +331,29 @@ sys_open(void)
     return -1;
   }
 
+  if(ip->type==T_SYMLINK){ // 如果该文件类型是软链接文件，进入
+    if(!(omode&O_NOFOLLOW)){ // 如果没有O_NOFOLLOW，说明是想通过软链接打开文件
+      int cycle=0;
+      char target[MAXPATH];
+      while(ip->type==T_SYMLINK){
+        if(cycle==10){ // 递归深度达到10就终止查找，认为存在环路引用
+          iunlockput(ip);
+          end_op();
+          return -1;
+        }
+        cycle++;
+        memset(target,0,sizeof(target));
+        readi(ip,0,(uint64)target,0,MAXPATH);  // 从ip中读数据到target中
+        iunlockput(ip); // 解锁并put
+        if((ip=namei(target))==0){
+          end_op();
+          return -1; // target不存在
+        }
+        ilock(ip);
+      }
+    }
+  }
+
   if(ip->type == T_DEVICE){
     f->type = FD_DEVICE;
     f->major = ip->major;
@@ -482,5 +506,31 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64
+sys_symlink(void)
+{
+  char target[MAXPATH];
+  memset(target,0,sizeof(target));
+  char path[MAXPATH];
+  if(argstr(0,target,MAXPATH)<0||argstr(1,path,MAXPATH)<0){ // 将系统调用的参数以string传递过来
+    return -1;
+  }
+  
+  struct inode *ip;
+  begin_op();
+  if((ip = create(path, T_SYMLINK, 0, 0)) == 0){ // 创建一个符号链接文件，分配一个dinode
+    end_op();
+    return -1;
+  }
+
+  if(writei(ip,0,(uint64)target,0,MAXPATH)!=MAXPATH){ // fill the symlink file with target
+    return -1;
+  }
+
+  iunlockput(ip);
+  end_op();
   return 0;
 }
