@@ -1,4 +1,6 @@
+/*输出的可执行文件为riscv体系结构的二进制*/
 OUTPUT_ARCH( "riscv" )
+/* 链接完的可执行程序运行入口是 _entry 符号的地址，_entry符号定义在 ./kernel/entry.S 中 */
 ENTRY( _entry )
 
 SECTIONS

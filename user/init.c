@@ -1,5 +1,5 @@
 // init: The initial user-level program
-
+// creates a new console device file if needed and then opens it as file descriptors 0, 1, and 2
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "kernel/spinlock.h"
