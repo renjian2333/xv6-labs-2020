@@ -302,6 +302,30 @@ fork(void)
 
   np->state = RUNNABLE;
 
+  np->vma = 0;
+  struct vma *pv = p->vma;
+  struct vma *pre = 0;
+  while(pv){
+    struct vma *vma = vma_alloc(); // 为子进程分配新的vma，与父进程存放相同的数据
+    vma->start = pv->start;
+    vma->end = pv->end;
+    vma->off = pv->off;
+    vma->length = pv->length;
+    vma->permission = pv->permission;
+    vma->flags = pv->flags;
+    vma->file = pv->file;
+    filedup(vma->file);
+    vma->next = 0;
+    if(pre == 0){
+      np->vma = vma;
+    }else{
+      pre->next = vma;
+    }
+    pre = vma;
+    release(&vma->lock);
+    pv = pv->next;
+  }
+
   release(&np->lock);
 
   return pid;
@@ -343,6 +367,21 @@ exit(int status)
 
   if(p == initproc)
     panic("init exiting");
+  
+  // 进程结束时将将`vma`中的数据写回文件中，同时其对应的释放物理页
+  struct vma* v = p->vma;
+  struct vma* pv;
+  while(v){
+    writeback(v, v->start, v->length);
+    uvmunmap(p->pagetable, v->start, PGROUNDUP(v->length) / PGSIZE, 1);
+    fileclose(v->file);
+    pv = v->next;
+    acquire(&v->lock);
+    v->next = 0;
+    v->length = 0;
+    release(&v->lock);
+    v = pv;
+  }
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
@@ -700,4 +739,18 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+struct vma vma_list[NVMA];
+
+struct vma* vma_alloc(){ // 实现vma的分配
+  for(int i = 0; i < NVMA; i++){ //遍历整个vma链表
+    acquire(&vma_list[i].lock);
+    if(vma_list[i].length == 0){ // length为零代表未使用
+      return &vma_list[i];
+    }else{
+      release(&vma_list[i].lock);
+    }
+  }
+  panic("no enough vma");
 }

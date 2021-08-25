@@ -484,3 +484,101 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void)
+{
+  uint64 addr;
+  int length, prot, flags, fd, offset;
+  // 获取参数
+  if(argaddr(0, &addr) < 0 || argint(1, &length) < 0 || argint(2, &prot) < 0 || argint(3, &flags) < 0 || argint(4, &fd) < 0 || argint(5, &offset) < 0){
+    return -1;
+  }
+
+  struct proc *p = myproc();
+  struct file* f = p->ofile[fd];
+
+  int pte_flag = PTE_U;
+  if (prot & PROT_WRITE) {
+    if(!f->writable && !(flags & MAP_PRIVATE)) return -1; // 试图映射一个不可写文件with写权限，返回错误
+    pte_flag |= PTE_W;
+  }
+  if (prot & PROT_READ) {
+    if(!f->readable) return -1; // 试图映射一个不可读文件with读权限，返回错误
+    pte_flag |= PTE_R;
+  }
+
+  struct vma* v = vma_alloc(); // 申请一个vma
+  // 将信息填入该vma中
+  v->permission = pte_flag;
+  v->length = length;
+  v->off = offset;
+  v->file = myproc()->ofile[fd];
+  v->flags = flags;
+  filedup(f);  // 增加f文件的ref
+  struct vma* pv = p->vma;
+  if(pv == 0){  // 为0说明尚未申请过vma
+    v->start = VMA_START; // 则新的vma从最原始的地方开始
+    v->end = v->start + length;
+    p->vma = v;
+  }else{  // 该进程中已经有vma了
+    while(pv->next) pv = pv->next; //新的vma接在原来的链表后
+    v->start = PGROUNDUP(pv->end);
+    v->end = v->start + length;
+    pv->next = v;
+    v->next = 0;
+  }
+  addr = v->start; // 返回该vma开始的位置
+
+  release(&v->lock);
+  return addr;
+}
+
+uint64
+sys_munmap(void)
+{
+  uint64 addr;
+  int length;
+  if(argaddr(0, &addr) < 0 || argint(1, &length) < 0){
+    return -1;
+  }
+
+  struct proc *p = myproc();
+  struct vma *v = p->vma;
+  struct vma *pre = 0;
+  while(v != 0){
+    if(addr >= v->start && addr < v->end) break; // found
+    pre = v;
+    v = v->next;
+  }
+
+  if(v == 0) return -1; // not mapped
+
+  if(addr == v->start){
+    writeback(v, addr, length); // 释放前需要先写回
+    uvmunmap(p->pagetable, addr, length / PGSIZE, 1); // 释放对应物理页
+    if(length == v->length){
+      // free all
+      fileclose(v->file);
+      if(pre == 0){
+        p->vma = v->next; // head
+      }else{
+        pre->next = v->next;
+        v->next = 0;
+      }
+      acquire(&v->lock);
+      v->length = 0;
+      release(&v->lock);
+    }else{
+      // free head
+      v->start -= length;
+      v->off += length;
+      v->length -= length;
+    }
+  }else{
+    // free tail
+    v->length -= length;
+    v->end -= length;
+  }
+  return 0;
+}
